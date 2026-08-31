@@ -1,0 +1,4 @@
+# Una URL por línea. Las líneas vacías y las que empiezan por # se ignoran.
+https://www.example.com
+https://app.example.com/login
+https://api.example.com/v1/status

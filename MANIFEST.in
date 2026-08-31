@@ -1,0 +1,16 @@
+include CHANGELOG-8.5.1.md
+include CONTRIBUTING.md
+include .gitignore
+include README.md
+include SECURITY.md
+include VALIDACION-8.5.1.md
+include mejora.py
+include requirements.txt
+include safewebheaders.py
+include urls.example.txt
+recursive-include tests *.py
+recursive-include safewebheaders/web/assets *.html *.css *.js *.svg
+recursive-include .github *.yml
+include tools/build_release.py
+include uv.lock
+recursive-include upload mejora.py

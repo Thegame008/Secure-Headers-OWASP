@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title description">
+  <title id="title">SafeWebHeaders</title>
+  <desc id="description">Escudo azul con una pila de cabeceras HTTP y un sello de verificación</desc>
+  <defs>
+    <linearGradient id="swh-body" x1="12" y1="4" x2="52" y2="60" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4a93ff"/>
+      <stop offset="0.5" stop-color="#125fff"/>
+      <stop offset="1" stop-color="#00307f"/>
+    </linearGradient>
+    <linearGradient id="swh-seal" x1="38" y1="38" x2="58" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#3ff0c4"/>
+      <stop offset="1" stop-color="#12b389"/>
+    </linearGradient>
+    <linearGradient id="swh-gloss" x1="16" y1="6" x2="34" y2="34" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff" stop-opacity=".34"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Cuerpo del escudo: seguridad. -->
+  <path fill="url(#swh-body)" d="M32 2.5 57 11.2v18.2c0 15.7-9.2 26.6-25 32.1C16.2 56 7 45.1 7 29.4V11.2L32 2.5Z"/>
+  <path fill="url(#swh-gloss)" d="M32 2.5 57 11.2v18.2c0 3-.3 5.8-1 8.4C42 26.4 32 14.6 32 2.5Z"/>
+  <path fill="none" stroke="#a9ccff" stroke-width="1.4" opacity=".55" d="M32 6.6 53.2 14v15.4c0 13.3-7.9 22.8-21.2 28-13.3-5.2-21.2-14.7-21.2-28V14L32 6.6Z"/>
+
+  <!-- Pila de cabeceras HTTP: el objeto que se audita. -->
+  <g fill="#ffffff">
+    <rect x="17" y="18" width="30" height="4.6" rx="2.3"/>
+    <rect x="17" y="26.4" width="23" height="4.6" rx="2.3" opacity=".86"/>
+    <rect x="17" y="34.8" width="15" height="4.6" rx="2.3" opacity=".72"/>
+  </g>
+
+  <!-- Sello de verificación: el veredicto de la auditoría. -->
+  <circle cx="46.5" cy="45.5" r="11.5" fill="#00224f"/>
+  <circle cx="46.5" cy="45.5" r="9.6" fill="url(#swh-seal)"/>
+  <path fill="none" stroke="#00224f" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.8" d="m41.8 45.6 3.4 3.4 6.1-6.7"/>
+</svg>

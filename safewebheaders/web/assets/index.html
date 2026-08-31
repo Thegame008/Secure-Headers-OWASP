@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="safewebheaders-token" content="__SWH_TOKEN__">
+  <title>SafeWebHeaders — Analizador de cabeceras HTTP</title>
+  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="SafeWebHeaders, inicio">
+      <span class="brand-mark" aria-hidden="true"><img src="/logo.svg" alt=""></span>
+      <span><strong>SafeWebHeaders</strong><small>HTTP security auditor</small></span>
+    </a>
+    <div class="top-actions">
+      <button id="theme-toggle" class="theme-toggle" type="button" role="switch" aria-checked="true" aria-label="Cambiar entre modo oscuro y claro">
+        <span class="theme-track"><span class="theme-thumb"></span></span>
+        <span class="theme-label" id="theme-label">Oscuro</span>
+      </button>
+      <span class="local-badge"><span></span> Solo local</span>
+      <span class="version">v__SWH_VERSION__</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">ANÁLISIS TÉCNICO · EVIDENCIA REPRODUCIBLE</p>
+        <h1>Analizador de cabeceras<br><span>HTTP de seguridad</span></h1>
+        <p>Escanea sitios, procesa lotes o revisa evidencia pegada sin salir de tu equipo. El mismo motor de la CLI, ahora con una vista visual y RAW.</p>
+      </div>
+      <div class="hero-proof" aria-label="Capacidades principales">
+        <div><span class="proof-icon success">✓</span><p><strong>Clasificación contextual</strong><small>HTML, API, assets y redirecciones</small></p></div>
+        <div><span class="proof-icon warning">↪</span><p><strong>Cadena completa</strong><small>3xx, meta refresh y URL final</small></p></div>
+        <div><span class="proof-icon info">{ }</span><p><strong>Evidencia exportable</strong><small>RAW reconstruido y JSON</small></p></div>
+      </div>
+    </section>
+
+    <section class="scanner-shell" aria-labelledby="scanner-title">
+      <div class="scanner-heading">
+        <div>
+          <p class="section-kicker">CENTRO DE ANÁLISIS</p>
+          <h2 id="scanner-title">¿Qué quieres revisar?</h2>
+        </div>
+        <p class="scope-note">Las solicitudes salen únicamente desde este equipo.</p>
+      </div>
+
+      <div class="mode-tabs" role="tablist" aria-label="Modo de análisis">
+        <button class="mode-tab active" type="button" role="tab" aria-selected="true" data-mode="single">
+          <span class="tab-icon">◎</span><span>Una URL<small>Escaneo individual</small></span>
+        </button>
+        <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="batch">
+          <span class="tab-icon">≡</span><span>Varias URL<small>Una por línea</small></span>
+        </button>
+        <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="headers">
+          <span class="tab-icon">⌁</span><span>Pegar cabeceras<small>Evidencia manual</small></span>
+        </button>
+        <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode="csp">
+          <span class="tab-icon">{ }</span><span>Solo CSP<small>Política aislada</small></span>
+        </button>
+      </div>
+
+      <form id="scan-form" novalidate>
+        <div class="mode-panel active" data-panel="single" role="tabpanel">
+          <label for="single-url">URL objetivo</label>
+          <div class="input-action">
+            <div class="input-with-icon"><span>⌁</span><input id="single-url" type="url" placeholder="https://example.com" autocomplete="url" spellcheck="false"></div>
+            <button class="primary-button" type="submit"><span>⌕</span> Analizar URL</button>
+          </div>
+          <p class="field-help">Con <strong>seguir redirecciones</strong> se auditan las cabeceras de la URL final.</p>
+        </div>
+
+        <div class="mode-panel" data-panel="batch" role="tabpanel" hidden>
+          <label for="batch-urls">Listado de URL</label>
+          <textarea id="batch-urls" rows="7" placeholder="https://uno.example&#10;https://dos.example/login&#10;https://api.example/v1"></textarea>
+          <div class="panel-footer"><p class="field-help">Sin límite fijo de cantidad: se ignoran duplicados, líneas vacías y comentarios con #. Los objetivos se procesan secuencialmente.</p><button class="primary-button" type="submit"><span>⌕</span> Analizar lote</button></div>
+        </div>
+
+        <div class="mode-panel" data-panel="headers" role="tabpanel" hidden>
+          <div class="two-fields">
+            <div><label for="headers-url">URL asociada a la evidencia <em>obligatoria</em></label><input id="headers-url" type="url" placeholder="https://cliente.example/login" spellcheck="false"></div>
+            <div><label for="manual-profile">Interpretar respuesta como</label><div class="select-control"><select id="manual-profile"><option value="auto">Automático (recomendado)</option><option value="web">Página web / HTML</option><option value="api">API / JSON / XML</option></select><span aria-hidden="true">⌄</span></div><small class="control-help">Automático decide según Content-Type; fuerza Web o API solo cuando el servidor lo declara mal.</small></div>
+          </div>
+          <label for="raw-headers">Cabeceras HTTP de respuesta</label>
+          <textarea id="raw-headers" class="code-input" rows="12" placeholder="HTTP/1.1 200 OK&#10;Content-Type: text/html; charset=UTF-8&#10;Strict-Transport-Security: max-age=31536000&#10;Content-Security-Policy: default-src 'self'&#10;X-Frame-Options: DENY"></textarea>
+          <div class="panel-footer"><p class="field-help">Acepta formato Burp/curl y valores duplicados. No se conecta a la URL indicada.</p><button class="primary-button" type="submit"><span>⌕</span> Analizar cabeceras</button></div>
+        </div>
+
+        <div class="mode-panel" data-panel="csp" role="tabpanel" hidden>
+          <label for="csp-url">URL asociada a la evidencia <em>obligatoria</em></label>
+          <input id="csp-url" type="url" placeholder="https://cliente.example/portal" spellcheck="false">
+          <label for="csp-policy">Content-Security-Policy</label>
+          <textarea id="csp-policy" class="code-input" rows="10" placeholder="default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"></textarea>
+          <div class="panel-footer"><p class="field-help">Puedes pegar solo el valor o incluir Content-Security-Policy: / Content-Security-Policy-Report-Only:.</p><button class="primary-button" type="submit"><span>⌕</span> Analizar CSP</button></div>
+        </div>
+
+        <details class="advanced" id="advanced-options">
+          <summary><span>⚙</span> Opciones del análisis <small>Configura alcance, cookies y red</small></summary>
+          <div class="advanced-grid">
+            <label class="switch-row url-option"><input id="follow-redirects" type="checkbox" checked><span class="switch"></span><span><strong>Seguir redirecciones</strong><small>3xx y meta refresh hasta la URL final</small></span></label>
+            <label class="switch-row"><input id="all-headers" type="checkbox"><span class="switch"></span><span><strong>Analizar todas las cabeceras</strong><small>Activa el informe completo; por defecto se usan HSTS, CSP y X-Frame-Options</small></span></label>
+            <label class="switch-row non-csp-option"><input id="evaluate-cookies" type="checkbox"><span class="switch"></span><span><strong>Evaluar cookies</strong><small>Secure, HttpOnly y SameSite</small></span></label>
+            <label class="switch-row"><input id="reveal-sensitive" type="checkbox"><span class="switch danger"></span><span><strong>Revelar valores sensibles</strong><small>Puede exponer cookies, tokens y nonces</small></span></label>
+            <label class="switch-row url-option"><input id="use-environment" type="checkbox"><span class="switch"></span><span><strong>Usar entorno</strong><small>Proxy, CA y .netrc configurados</small></span></label>
+            <label class="switch-row url-option"><input id="insecure" type="checkbox"><span class="switch danger"></span><span><strong>Ignorar validación TLS</strong><small>Solo laboratorios autorizados</small></span></label>
+            <label class="compact-field url-option method-field"><span>Método HTTP</span><div class="select-control"><select id="method"><option value="GET">GET · página completa</option><option value="HEAD">HEAD · solo metadatos</option><option value="OPTIONS">OPTIONS · capacidades</option><option value="POST">POST · cuerpo explícito</option></select><span aria-hidden="true">⌄</span></div><small id="method-help" class="control-help">GET obtiene la representación normal y permite detectar redirecciones HTML.</small></label>
+            <label class="compact-field url-option profile-field"><span>Perfil de análisis</span><div class="select-control"><select id="profile"><option value="auto">Automático (recomendado)</option><option value="web">Página web / HTML</option><option value="api">API / JSON / XML</option></select><span aria-hidden="true">⌄</span></div><small id="profile-help" class="control-help">Usa Content-Type para aplicar únicamente las reglas que corresponden.</small></label>
+            <label class="switch-row url-option"><input id="prepare-cors-poc" type="checkbox"><span class="switch"></span><span><strong>Preparar PoC de CORS</strong><small>Envía una sonda con el Origin de esta interfaz para que la PoC sea verificable</small></span></label>
+            <label class="switch-row url-option"><input id="show-favicon" type="checkbox" checked><span class="switch"></span><span><strong>Mostrar favicon del objetivo</strong><small>Añade una petición a /favicon.ico. El servidor local lo incrusta; el navegador nunca contacta al sitio</small></span></label>
+            <label class="compact-field wide-field"><span>Ocultar cabeceras del informe</span><input id="excluded-headers" type="text" list="excludable-headers" placeholder="Server, X-Powered-By" spellcheck="false" autocomplete="off"><datalist id="excludable-headers"></datalist><span id="excluded-suggestions" class="suggestion-row"></span><small class="control-help">Separa por comas, o toca una sugerencia. Equivale a <code>--exclude-header</code>: la comprobación se omite y queda registrada como exclusión explícita. La vista RAW nunca se altera.</small></label>
+            <label class="compact-field url-option"><span>Timeout por fase</span><div class="number-input"><input id="timeout" type="number" value="15" min="1" max="120"><span>seg</span></div></label>
+            <div id="post-options" class="post-options url-option" hidden>
+              <div><label for="post-content-type">Content-Type del cuerpo</label><div class="select-control"><select id="post-content-type"><option value="application/json">application/json</option><option value="application/xml">application/xml</option><option value="application/x-www-form-urlencoded">application/x-www-form-urlencoded</option><option value="text/plain">text/plain</option></select><span aria-hidden="true">⌄</span></div></div>
+              <div><label for="post-body">Cuerpo POST</label><textarea id="post-body" class="code-input" rows="5" placeholder='{"campo":"valor-de-prueba"}'></textarea></div>
+              <p><strong>[!] Uso consciente:</strong> POST puede iniciar sesión, enviar formularios o ejecutar operaciones. En un lote, este mismo cuerpo se envía a cada URL. SafeWebHeaders no lo guarda ni lo muestra en el reporte.</p>
+            </div>
+          </div>
+        </details>
+      </form>
+      <div id="status" class="status" role="status" aria-live="polite" hidden></div>
+    </section>
+
+    <section id="results" class="results" hidden aria-live="polite">
+      <div class="results-toolbar">
+        <div><p class="section-kicker">RESULTADO</p><h2>Informe de cabeceras</h2></div>
+        <div class="result-actions"><button id="download-json" class="secondary-button" type="button">⇩ Descargar JSON</button><button id="print-report" class="secondary-button" type="button">⌑ Imprimir / PDF</button></div>
+      </div>
+      <div id="batch-summary" class="batch-summary" hidden></div>
+      <div class="result-layout">
+        <aside class="workspace-nav" aria-label="Secciones del informe">
+          <div class="workspace-brand"><img src="/logo.svg" alt=""><span><strong>Workspace</strong><small>Informe activo</small></span></div>
+          <nav id="section-nav" class="section-nav" aria-label="Áreas de análisis"></nav>
+          <div id="target-list" class="target-list" aria-label="Objetivos analizados"></div>
+        </aside>
+        <div id="report-view" class="report-view"></div>
+      </div>
+    </section>
+  </main>
+
+  <footer><span>SafeWebHeaders v__SWH_VERSION__</span><span>Servidor local · Sin telemetría · Sin recursos externos</span></footer>
+</body>
+</html>

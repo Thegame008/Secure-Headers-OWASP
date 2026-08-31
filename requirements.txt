@@ -1,0 +1,3 @@
+requests==2.34.2
+colorama==0.4.6
+requests-pkcs12==1.27

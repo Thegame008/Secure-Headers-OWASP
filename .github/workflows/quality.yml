@@ -1,0 +1,32 @@
+name: quality
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - run: python -m pip install pytest ruff mypy types-requests bandit pip-audit build twine
+      - run: python -m pytest -q
+      - run: python -m compileall -q safewebheaders tests
+      - run: ruff format --check safewebheaders tests safewebheaders.py mejora.py upload/mejora.py tools/build_release.py
+      - run: ruff check safewebheaders tests safewebheaders.py mejora.py upload/mejora.py tools/build_release.py
+      - run: mypy safewebheaders
+      - run: bandit -q -r safewebheaders safewebheaders.py mejora.py upload/mejora.py tools/build_release.py
+      - run: pip-audit -r requirements.txt
+      - run: python -m build
+      - run: twine check dist/*
