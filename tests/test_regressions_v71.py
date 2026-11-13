@@ -176,7 +176,11 @@ class HeaderNameCaseTests(unittest.TestCase):
         finding = swh.analyze_x_frame_options(snap, set(), "web")[0]
         self.assertEqual(headers["x-frame-options"], ["DENY", "SAMEORIGIN"])
         self.assertEqual(finding.status, "incorrecta")
-        self.assertIn("varios", finding.title.lower())
+        # 8.5.3: el título distingue el duplicado exacto del contradictorio.
+        self.assertIn("repetida", finding.title.lower())
+        self.assertIn("contradictorios", finding.title.lower())
+        self.assertIn("[campo 1] DENY", finding.evidence)
+        self.assertIn("[campo 2] SAMEORIGIN", finding.evidence)
 
     def test_cli_aliases_are_not_treated_as_real_response_header_names(self) -> None:
         headers, display_names = extract(

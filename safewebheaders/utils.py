@@ -5,6 +5,7 @@ from __future__ import annotations
 import difflib
 import ipaddress
 import queue
+from dataclasses import dataclass
 import re
 import socket
 import threading
@@ -329,3 +330,80 @@ def parse_request_headers(values: Sequence[str]) -> dict[str, str]:
         observed_names.add(normalized)
         headers[name] = value.strip()
     return headers
+
+
+@dataclass(frozen=True)
+class RepeatedFieldAnalysis:
+    """Comparación profunda de varios campos con el mismo nombre.
+
+    Un mensaje puede traer la misma cabecera en varias líneas. Mostrarlas
+    unidas por un separador sugiere que la cabecera tiene un único valor
+    compuesto, que es justo lo que no ocurre: son campos independientes y el
+    navegador decide qué hacer con ellos.
+    """
+
+    values: tuple[str, ...]
+    normalized: tuple[str, ...]
+    distinct: tuple[str, ...]
+    identical: bool
+    differs_only_in_case: bool
+    differs_only_in_whitespace: bool
+    combined: str
+
+    @property
+    def count(self) -> int:
+        return len(self.values)
+
+
+def normalize_field_value(value: str) -> str:
+    """Normaliza un valor de campo para comparar: espacios y mayúsculas."""
+
+    return re.sub(r"\s+", " ", value.strip()).lower()
+
+
+def analyze_repeated_field(values: Sequence[str]) -> RepeatedFieldAnalysis:
+    """Compara los campos repetidos distinguiendo el tipo de diferencia.
+
+    ``SAMEORIGIN`` y ``sameorigin`` son el mismo token para un navegador, pero
+    revelan que dos componentes distintos escribieron la cabecera. Separar ese
+    caso del conflicto real (``DENY`` frente a ``SAMEORIGIN``) permite explicar
+    la causa probable en vez de limitarse a decir que está duplicada.
+    """
+
+    raw = tuple(values)
+    normalized = tuple(normalize_field_value(value) for value in raw)
+    distinct: list[str] = []
+    for item in normalized:
+        if item not in distinct:
+            distinct.append(item)
+    identical = len(distinct) <= 1
+    collapsed = tuple(re.sub(r"\s+", " ", value.strip()) for value in raw)
+    differs_only_in_case = identical and len(set(collapsed)) > 1
+    differs_only_in_whitespace = (
+        identical and len(set(collapsed)) == 1 and len(set(raw)) > 1
+    )
+    return RepeatedFieldAnalysis(
+        values=raw,
+        normalized=normalized,
+        distinct=tuple(distinct),
+        identical=identical,
+        differs_only_in_case=differs_only_in_case,
+        differs_only_in_whitespace=differs_only_in_whitespace,
+        # Lo que obtendría un receptor que aplique la recombinación que
+        # permite RFC 9110 §5.3 a un campo que no es una lista.
+        combined=", ".join(value.strip() for value in raw),
+    )
+
+
+def format_repeated_field(values: Sequence[str]) -> str:
+    """Representa cada campo en su propia línea, numerado.
+
+    Es lo que ve el analista tanto en consola como en la interfaz web: ambas
+    respetan los saltos de línea de este texto.
+    """
+
+    if len(values) <= 1:
+        return values[0] if values else ""
+    return "\n".join(
+        f"[campo {index}] {value}" for index, value in enumerate(values, start=1)
+    )

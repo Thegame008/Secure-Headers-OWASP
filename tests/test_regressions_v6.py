@@ -234,25 +234,29 @@ class HstsVerdictTests(unittest.TestCase):
         self.assertEqual(len(findings), 1)
         return findings[0]
 
-    def test_user_case_is_one_incorrect_verdict(self) -> None:
+    def test_one_year_alone_meets_the_required_minimum(self) -> None:
+        # 8.5.2: includeSubDomains es opcional según Mozilla, MDN y RFC 6797.
+        # Un año supera el mínimo de seis meses, así que el veredicto es correcto
+        # y la referencia de dos años se comunica como observación.
         item = self.verdict("max-age=31536000")
-        self.assertEqual(item.status, "incorrecta")
-        self.assertIn("falta includeSubDomains", item.evidence)
+        self.assertEqual(item.status, "correcta")
+        self.assertIn("includeSubDomains no está presente", item.evidence)
         self.assertIn("63072000", item.evidence)
 
     def test_owasp_baseline_is_correct(self) -> None:
         item = self.verdict("max-age=63072000; includeSubDomains")
         self.assertEqual(item.status, "correcta")
 
-    def test_one_year_with_subdomains_is_below_adopted_baseline(self) -> None:
+    def test_one_year_with_subdomains_is_correct(self) -> None:
+        # 8.5.2: por encima del mínimo de seis meses el veredicto es correcto.
         item = self.verdict("max-age=31536000; includeSubDomains")
-        self.assertEqual(item.status, "incorrecta")
-        self.assertIn("inferior", item.evidence)
+        self.assertEqual(item.status, "correcta")
 
-    def test_two_years_without_subdomains_is_incomplete(self) -> None:
+    def test_two_years_without_subdomains_is_correct(self) -> None:
+        # 8.5.2: la ausencia de includeSubDomains ya no degrada el veredicto.
         item = self.verdict("max-age=63072000")
-        self.assertEqual(item.status, "incorrecta")
-        self.assertIn("falta includeSubDomains", item.evidence)
+        self.assertEqual(item.status, "correcta")
+        self.assertIn("includeSubDomains no está presente", item.evidence)
 
     def test_unknown_extension_is_ignored_per_rfc6797(self) -> None:
         item = self.verdict(

@@ -43,6 +43,7 @@ from .rules_csp import (
     redact_csp_crypto_sources,
 )
 from .utils import (
+    format_repeated_field,
     canonical_header,
     display_timestamp,
     normalize_header_name,
@@ -782,16 +783,24 @@ def finding_value(report: ScanReport, item: Finding) -> str:
     if key in source_headers:
         values = source_headers[key]
         if key == "set-cookie":
-            return " | ".join(redact_set_cookie(value) for value in values)
+            return format_repeated_field(
+                [redact_set_cookie(value) for value in values]
+            )
         if _is_sensitive_response_header(key):
             return "<redactado>"
         if key.startswith("content-security-policy"):
             from .rules_csp import redact_csp_crypto_sources
 
-            return " | ".join(redact_csp_crypto_sources(value) for value in values)
+            return format_repeated_field(
+                [redact_csp_crypto_sources(value) for value in values]
+            )
         if key in {"location", "content-location"}:
-            return " | ".join(redact_url_secrets(value) for value in values)
-        return " | ".join(values)
+            return format_repeated_field(
+                [redact_url_secrets(value) for value in values]
+            )
+        # Un campo por línea: unirlos con un separador hacía leer dos campos
+        # repetidos como si la cabecera tuviera un único valor compuesto.
+        return format_repeated_field(values)
     if item.status == "ausente":
         return "No encontrada"
     return item.evidence or "Sin valor"
@@ -892,13 +901,19 @@ def append_field(
     highlight: bool = False,
 ) -> None:
     label = sanitize_terminal_text(label)
-    value = sanitize_terminal_text(value)
-    if not value:
+    if not str(value):
         return
     plain_label = f"{label}:"
     first_prefix = "|  "
     continuation = "|  " + " " * (len(plain_label) + 1)
-    paragraphs = value.splitlines() or [value]
+    # Los saltos de línea propios del informe (un campo repetido por línea) se
+    # respetan; el saneado anti-ANSI se aplica después, a cada línea por
+    # separado, de modo que ningún control del servidor llega al terminal.
+    paragraphs = [
+        sanitize_terminal_text(paragraph) for paragraph in str(value).splitlines()
+    ] or [sanitize_terminal_text(value)]
+    if not any(paragraphs):
+        return
     first_line = True
     for paragraph in paragraphs:
         available = max(24, width - len(first_prefix) - len(plain_label) - 1)

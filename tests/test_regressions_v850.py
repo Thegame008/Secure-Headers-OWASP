@@ -361,3 +361,255 @@ def test_excluding_a_header_never_alters_the_raw_view() -> None:
     assert "Server: nginx/1.24.0" in block
     assert "X-Powered-By: PHP/8.1" in block
     assert report.excluded_headers == ["server", "x-powered-by"]
+
+
+# --------------------------------------------------------------------------
+# 8. HSTS 8.5.2: umbrales de Mozilla/MDN y opcionalidad de las directivas
+# --------------------------------------------------------------------------
+
+
+def hsts(value: str | None, *, url: str = "https://cliente.example/") -> swh.Finding:
+    headers = {"content-type": ["text/html"]}
+    if value is not None:
+        headers["strict-transport-security"] = [value]
+    snap = swh.ResponseSnapshot(
+        url=url, status_code=200, reason="OK", headers=headers, display_names={}
+    )
+    findings = swh.analyze_hsts(snap, set())
+    assert len(findings) == 1
+    return findings[0]
+
+
+@pytest.mark.parametrize("seconds", [1, 300, 604800, 2592000, 15767999])
+def test_max_age_below_six_months_is_incorrect(seconds: int) -> None:
+    item = hsts(f"max-age={seconds}")
+    assert item.status == "incorrecta"
+    assert "no alcanza el mínimo" in item.title
+    assert "15768000" in item.recommendation
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "max-age=15768000",
+        "max-age=15768000; includeSubDomains",
+        "max-age=31536000",
+        "max-age=63072000",
+        "max-age=63072000; includeSubDomains",
+        "max-age=63072000; includeSubDomains; preload",
+        "max-age=94608000",
+    ],
+)
+def test_max_age_at_or_above_six_months_is_correct(value: str) -> None:
+    assert hsts(value).status == "correcta"
+
+
+def test_include_subdomains_is_optional_and_never_downgrades() -> None:
+    item = hsts("max-age=63072000")
+    assert item.status == "correcta"
+    # Se comunica como opción, con su condición, no como una carencia.
+    assert "includeSubDomains no está presente" in item.evidence
+    assert "opcional" in item.evidence
+    assert "subdominios" in item.evidence
+
+
+def test_preload_is_never_required() -> None:
+    item = hsts("max-age=63072000; includeSubDomains")
+    assert item.status == "correcta"
+    # La herramienta no puede empujar hacia la lista de precarga: la propia
+    # hstspreload.org pide que no se recomiende por defecto.
+    assert "preload son opcionales" in item.recommendation
+
+
+def test_below_recommended_two_years_is_only_an_observation() -> None:
+    item = hsts("max-age=15768000")
+    assert item.status == "correcta"
+    assert "63072000" in item.evidence
+    assert "recomendada" in item.evidence
+
+
+def test_preload_without_include_subdomains_is_incorrect() -> None:
+    item = hsts("max-age=63072000; preload")
+    assert item.status == "incorrecta"
+    assert "preload" in item.title
+    assert "includeSubDomains" in item.evidence
+
+
+def test_preload_below_one_year_is_incorrect() -> None:
+    item = hsts("max-age=15768000; includeSubDomains; preload")
+    assert item.status == "incorrecta"
+    assert "31536000" in item.evidence
+
+
+def test_zero_max_age_still_disables_the_policy() -> None:
+    item = hsts("max-age=0")
+    assert item.status == "incorrecta"
+    assert "max-age=0" in item.title
+
+
+def test_hsts_references_cite_the_three_sources() -> None:
+    for value in ("max-age=300", "max-age=63072000", "max-age=63072000; preload"):
+        references = hsts(value).references
+        assert "https://wiki.mozilla.org/Security/Guidelines/Web_Security" in references
+        assert any("Practical_implementation_guides/TLS" in ref for ref in references)
+        assert "https://hstspreload.org/" in references
+
+
+def test_duration_is_reported_in_readable_units() -> None:
+    assert "meses" in hsts("max-age=15768000").evidence
+    assert "años" in hsts("max-age=63072000").evidence
+    assert "días" in hsts("max-age=604800").evidence
+
+
+# --------------------------------------------------------------------------
+# 9. Campos repetidos (8.5.3): RFC 9110 §5.3
+# --------------------------------------------------------------------------
+
+
+def xfo(*values: str) -> swh.Finding:
+    snap = swh.ResponseSnapshot(
+        url="https://cliente.example/",
+        status_code=200,
+        reason="OK",
+        headers={"content-type": ["text/html"], "x-frame-options": list(values)},
+        display_names={},
+    )
+    return swh.analyze_x_frame_options(snap, set(), "web")[0]
+
+
+def test_repeated_fields_are_listed_one_per_line() -> None:
+    item = xfo("SAMEORIGIN", "SAMEORIGIN")
+    # El defecto original: "SAMEORIGIN | SAMEORIGIN" se leía como un solo valor.
+    assert "|" not in item.evidence.split("Recombinación")[0]
+    assert "[campo 1] SAMEORIGIN" in item.evidence
+    assert "[campo 2] SAMEORIGIN" in item.evidence
+    assert "2 campos recibidos" in item.evidence
+
+
+def test_identical_repetition_is_reported_as_such() -> None:
+    item = xfo("SAMEORIGIN", "SAMEORIGIN")
+    assert item.status == "incorrecta"
+    assert "mismo valor" in item.title
+    assert item.severity == "media"
+    # Explica la causa más probable, no solo que está duplicada.
+    assert "proxy inverso" in item.risk or "capa intermedia" in item.risk
+
+
+def test_conflicting_repetition_is_more_severe() -> None:
+    item = xfo("SAMEORIGIN", "DENY")
+    assert item.status == "incorrecta"
+    assert "contradictorios" in item.title
+    assert item.severity == "alta"
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [("SAMEORIGIN", "sameorigin"), ("DENY", "deny"), ("SameOrigin", "SAMEORIGIN")],
+)
+def test_case_differences_are_not_treated_as_a_conflict(pair: tuple[str, str]) -> None:
+    item = xfo(*pair)
+    # Para el navegador son el mismo token; el hallazgo lo refleja.
+    assert "mismo valor" in item.title
+    assert "mayúsculas" in item.risk
+
+
+def test_whitespace_differences_are_not_treated_as_a_conflict() -> None:
+    item = xfo("SAMEORIGIN", "  SAMEORIGIN  ")
+    assert "mismo valor" in item.title
+    assert "espacios" in item.risk
+
+
+def test_repeated_field_finding_cites_rfc9110_first() -> None:
+    for values in [("SAMEORIGIN", "SAMEORIGIN"), ("SAMEORIGIN", "DENY")]:
+        item = xfo(*values)
+        assert item.references[0] == (
+            "https://www.rfc-editor.org/rfc/rfc9110.html#section-5.3"
+        )
+
+
+def test_evidence_shows_what_a_recipient_would_combine() -> None:
+    item = xfo("SAMEORIGIN", "DENY")
+    # RFC 9110 §5.3 permite recombinar; el resultado no es válido para XFO.
+    assert "SAMEORIGIN, DENY" in item.evidence
+
+
+def test_repetition_applies_to_other_non_list_headers() -> None:
+    from safewebheaders.rules_basic import analyze_hsts, analyze_x_content_type_options
+
+    base = {"content-type": ["text/html"]}
+    hsts_snap = swh.ResponseSnapshot(
+        url="https://cliente.example/",
+        status_code=200,
+        reason="OK",
+        headers={**base, "strict-transport-security": ["max-age=63072000"] * 2},
+        display_names={},
+    )
+    item = analyze_hsts(hsts_snap, set())[0]
+    assert "repetida" in item.title and "[campo 2]" in item.evidence
+
+    xcto_snap = swh.ResponseSnapshot(
+        url="https://cliente.example/",
+        status_code=200,
+        reason="OK",
+        headers={**base, "x-content-type-options": ["nosniff", "nosniff"]},
+        display_names={},
+    )
+    item = analyze_x_content_type_options(xcto_snap, set())[0]
+    assert "repetida" in item.title and "[campo 2]" in item.evidence
+
+
+def test_single_field_display_is_unchanged() -> None:
+    from safewebheaders.utils import format_repeated_field
+
+    assert format_repeated_field(["SAMEORIGIN"]) == "SAMEORIGIN"
+    assert format_repeated_field([]) == ""
+
+
+def test_multiple_csp_policies_are_not_flagged_as_repetition() -> None:
+    # CSP sí admite varias políticas: todas se aplican simultáneamente.
+    from safewebheaders.constants import NON_LIST_SECURITY_FIELDS
+
+    assert "content-security-policy" not in NON_LIST_SECURITY_FIELDS
+
+
+def test_repeated_fields_reach_both_surfaces() -> None:
+    raw = "\n".join(
+        [
+            "HTTP/1.1 200 OK",
+            "Content-Type: text/html; charset=utf-8",
+            "X-Frame-Options: SAMEORIGIN",
+            "X-Frame-Options: SAMEORIGIN",
+        ]
+    )
+    report = swh.create_manual_headers_report(
+        raw, "https://cliente.example/", essential_only=True
+    )
+
+    # CLI: un campo por línea, sin barra separadora.
+    console = swh.render_console(
+        report, color=False, reveal_sensitive=False, include_banner=False
+    )
+    assert "[campo 1] SAMEORIGIN" in console
+    assert "[campo 2] SAMEORIGIN" in console
+    assert "SAMEORIGIN | SAMEORIGIN" not in console
+
+    # GUI: el mismo texto, que la hoja de estilos respeta con pre-wrap.
+    data = swh.analyze_web_payload(
+        {
+            "mode": "headers",
+            "evidence_url": "https://cliente.example/",
+            "raw_headers": raw,
+            "options": {},
+        }
+    )
+    values = [
+        item["current_value"]
+        for category in data["results"][0]["categories"]
+        for item in category["findings"]
+        if item["header"] == "X-Frame-Options"
+    ]
+    assert values and values[0] == "[campo 1] SAMEORIGIN\n[campo 2] SAMEORIGIN"
+
+    # La vista RAW conserva la respuesta tal cual llegó.
+    block = data["results"][0]["raw_header_blocks"][0]["text"]
+    assert block.count("X-Frame-Options: SAMEORIGIN") == 2

@@ -30,6 +30,8 @@ from .models import (
     Finding,
     ResponseSnapshot,
 )
+from .rules_shared import repeated_field_finding
+from .utils import format_repeated_field
 from .profiles import (
     effective_response_kind,
     excluded_finding,
@@ -1576,21 +1578,12 @@ def analyze_x_frame_options(
             )
         ]
 
-    observed = " | ".join(values)
+    observed = format_repeated_field(values)
     if len(values) != 1:
         return [
-            finding(
-                "incorrectas",
-                "incorrecta",
-                "media",
+            repeated_field_finding(
                 "X-Frame-Options",
-                "Se recibieron varios campos X-Frame-Options",
-                evidence=observed,
-                risk=(
-                    "Los navegadores no procesan de forma uniforme valores duplicados; "
-                    "la protección puede quedar sin efecto."
-                ),
-                recommendation="Emite una sola cabecera con DENY o SAMEORIGIN.",
+                values,
                 references=[OWASP_CLICKJACKING, MDN_XFO, HTML_XFO],
             )
         ]

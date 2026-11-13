@@ -1,4 +1,4 @@
-# SafeWebHeaders 8.5.1
+# SafeWebHeaders 8.5.3
 
 SafeWebHeaders es un auditor CLI y GUI local de cabeceras HTTP de seguridad para
 una o varias URL. Clasifica la respuesta antes de aplicar reglas, conserva
@@ -21,6 +21,42 @@ analista debe indicar el cuerpo y su `Content-Type`; ese cuerpo no se copia al
 reporte. No se exponen PUT, PATCH ni DELETE porque una herramienta de auditoría
 de cabeceras no debería facilitar operaciones mutantes o destructivas por
 accidente.
+
+## Novedades de 8.5.3
+
+Tratamiento correcto de las **cabeceras repetidas** (RFC 9110 §5.3):
+
+- una respuesta con dos campos del mismo nombre ya no se muestra unida por una
+  barra. `SAMEORIGIN | SAMEORIGIN` se leía como un único valor compuesto cuando
+  en realidad eran dos campos independientes. Ahora cada campo ocupa su propia
+  línea, numerado, en la CLI y en la interfaz web;
+- el análisis distingue el **duplicado exacto** (misma intención, probable doble
+  emisión entre la aplicación y una capa intermedia) del **conflicto real**
+  (valores contradictorios), con severidad media y alta respectivamente;
+- la comparación es insensible a mayúsculas y a espacios, de modo que
+  `SAMEORIGIN` y `sameorigin` no se reportan como contradicción;
+- la evidencia muestra la recombinación que RFC 9110 permite a un receptor
+  (`SAMEORIGIN, SAMEORIGIN`), que no es un valor válido para la cabecera;
+- se cita RFC 9110 §5.3 como referencia principal del hallazgo.
+
+## Novedades de 8.5.2
+
+Revisión del criterio de **Strict-Transport-Security** contra las fuentes
+normativas (wiki de seguridad web de Mozilla, guía práctica de TLS de MDN y
+hstspreload.org):
+
+- **`max-age` es el único parámetro obligatorio.** El mínimo exigible son seis
+  meses (`15768000`) y la referencia recomendada son dos años (`63072000`).
+  Ninguna fuente fija un máximo, de modo que una duración mayor no se penaliza;
+- **`includeSubDomains` y `preload` son opcionales** y ya no degradan el
+  veredicto. Antes la herramienta marcaba como incorrecta una política válida
+  por no llevarlos, lo que empujaba a activar `includeSubDomains` sin comprobar
+  que todos los subdominios sirvieran HTTPS;
+- **si la política sí envía `preload`**, sus requisitos pasan a ser exigibles
+  (`max-age` de un año e `includeSubDomains`): sin ellos la solicitud sería
+  rechazada y el operador cree tener una protección que no tiene;
+- la duración se reporta en unidades legibles junto a los segundos;
+- las recomendaciones citan ahora las tres fuentes.
 
 ## Novedades de 8.5.1
 
@@ -114,12 +150,12 @@ accidente.
 
 ## Línea base para documentos web
 
-Por decisión de alcance de SafeWebHeaders 8.5.1, el análisis predeterminado se
+Por decisión de alcance de SafeWebHeaders 8.5.3, el análisis predeterminado se
 centra en tres cabeceras esenciales cuando la respuesta efectiva es un
 documento HTML. En API, assets, descargas, redirecciones y respuestas sin cuerpo
 solo aplica los controles que tienen efecto en ese contexto.
 
-| Cabecera | Criterio de SafeWebHeaders 8.5.1 |
+| Cabecera | Criterio de SafeWebHeaders 8.5.3 |
 | --- | --- |
 | `X-Frame-Options` | Debe existir en HTML interactivo. `DENY` y `SAMEORIGIN` son válidos; `ALLOW-FROM` está obsoleto. CSP `frame-ancestors` es la defensa moderna, pero se informa por separado. |
 | `Strict-Transport-Security` | En un dominio HTTPS, la línea base reforzada es `max-age=63072000; includeSubDomains`. `preload` no se exige automáticamente porque requiere una decisión operativa difícil de revertir. |
@@ -147,7 +183,7 @@ Además, MDN clasifica actualmente `Permissions-Policy` como experimental y de
 disponibilidad limitada.
 
 Por tanto, “las seis son obligatorias según OWASP y Mozilla” sería una frase
-demasiado absoluta. SafeWebHeaders 8.5.1 usa HSTS, CSP y X-Frame-Options como
+demasiado absoluta. SafeWebHeaders 8.5.3 usa HSTS, CSP y X-Frame-Options como
 alcance esencial predeterminado. El informe `--all-headers` añade
 Referrer-Policy y trata `X-Content-Type-Options`, `Content-Type` y
 `Permissions-Policy` como controles contextuales.
@@ -230,7 +266,7 @@ También puede instalarse la wheel incluida en `dist/` y usar el comando:
 safewebheaders https://example.com
 ```
 
-## Interfaz web local 8.5.1
+## Interfaz web local 8.5.3
 
 Inicia el servidor y abre la GUI automáticamente:
 
@@ -345,7 +381,7 @@ La ayuda integrada es la referencia rápida:
 safewebheaders --help
 ```
 
-## Interfaz CLI 8.5.1
+## Interfaz CLI 8.5.3
 
 ### Objetivos y clasificación
 
@@ -715,7 +751,7 @@ de esa decisión.
 
 ## Compatibilidad de nombres 8.0
 
-| Opción 8.0/8.2 | Opción pública 8.5.1 | Decisión |
+| Opción 8.0/8.2 | Opción pública 8.5.3 | Decisión |
 | --- | --- | --- |
 | `--csp-policy` | `--analyze-csp` | Renombrada; alias oculto. |
 | `--profile` | `--response-type` | Renombrada; `auto` sigue recomendado. |

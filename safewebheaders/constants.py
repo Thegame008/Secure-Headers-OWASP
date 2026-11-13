@@ -12,7 +12,7 @@ except ImportError:  # pragma: no cover - dependencia opcional en ejecución
     pass
 
 
-VERSION = "8.5.1"
+VERSION = "8.5.3"
 DEFAULT_USER_AGENT = f"SafeWebHeaders/{VERSION} (+security-header-audit)"
 
 ESSENTIAL_ONLY_NOTE = (
@@ -33,6 +33,48 @@ OWASP_HEADERS = (
     "https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html"
 )
 OWASP_SECURE_HEADERS = "https://owasp.org/www-project-secure-headers/"
+MOZILLA_WEB_SECURITY = "https://wiki.mozilla.org/Security/Guidelines/Web_Security"
+MDN_TLS_GUIDE = (
+    "https://developer.mozilla.org/en-US/docs/Web/Security/"
+    "Practical_implementation_guides/TLS"
+)
+HSTS_PRELOAD_LIST = "https://hstspreload.org/"
+#: RFC 9110 §5.3 (Field Order) rige qué ocurre cuando un mensaje repite el
+#: mismo nombre de campo: el emisor no debe hacerlo salvo que la gramática del
+#: campo sea una lista separada por comas, y el receptor puede recombinar las
+#: líneas en una sola separándolas por coma.
+RFC9110_FIELD_ORDER = "https://www.rfc-editor.org/rfc/rfc9110.html#section-5.3"
+
+#: Cabeceras de seguridad cuya gramática NO es una lista separada por comas.
+#: Repetir cualquiera de ellas incumple RFC 9110 §5.3 y deja el resultado a
+#: criterio del receptor. Content-Security-Policy queda deliberadamente fuera:
+#: el estándar CSP define que varias políticas se aplican simultáneamente.
+NON_LIST_SECURITY_FIELDS = {
+    "x-frame-options",
+    "x-content-type-options",
+    "strict-transport-security",
+    "referrer-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-embedder-policy",
+    "cross-origin-resource-policy",
+    "x-permitted-cross-domain-policies",
+    "x-dns-prefetch-control",
+    "access-control-allow-origin",
+    "access-control-allow-credentials",
+    "content-disposition",
+}
+
+#: Umbrales de ``max-age`` en segundos.
+#:
+#: Mozilla (wiki de seguridad web) y MDN (guía práctica de TLS) coinciden: el
+#: mínimo exigible son seis meses y el valor recomendado son dos años. Ninguna
+#: de las dos fuentes fija un máximo. Valores por debajo del mínimo solo tienen
+#: sentido durante el despliegue escalonado que describe hstspreload.org
+#: (5 minutos, 1 semana, 1 mes) para detectar roturas antes de comprometerse.
+HSTS_MIN_MAX_AGE = 15_768_000  # seis meses
+HSTS_RECOMMENDED_MAX_AGE = 63_072_000  # dos años
+#: Requisito de la lista de precarga: un año, includeSubDomains y preload.
+HSTS_PRELOAD_MIN_MAX_AGE = 31_536_000
 OWASP_CSP = (
     "https://cheatsheetseries.owasp.org/cheatsheets/"
     "Content_Security_Policy_Cheat_Sheet.html"

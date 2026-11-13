@@ -8,6 +8,12 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
 from .constants import (
+    HSTS_MIN_MAX_AGE,
+    HSTS_PRELOAD_LIST,
+    HSTS_PRELOAD_MIN_MAX_AGE,
+    HSTS_RECOMMENDED_MAX_AGE,
+    MDN_TLS_GUIDE,
+    MOZILLA_WEB_SECURITY,
     MDN_HSTS,
     MDN_REFERRER,
     MDN_XCTO,
@@ -20,6 +26,7 @@ from .models import (
     Finding,
     ResponseSnapshot,
 )
+from .rules_shared import repeated_field_finding
 from .profiles import (
     effective_response_kind,
     excluded_finding,
@@ -306,27 +313,23 @@ def analyze_hsts(snapshot: ResponseSnapshot, excluded: set[str]) -> list[Finding
                     "iniciar la navegación por HTTP."
                 ),
                 recommendation=(
-                    "Tras confirmar HTTPS en el dominio y sus subdominios, usa la línea base de "
-                    "OWASP: max-age=63072000; includeSubDomains. Activa preload solo de forma deliberada."
+                    "Emite HSTS desde la respuesta HTTPS con un max-age de al menos "
+                    "15768000 (seis meses); la referencia recomendada por Mozilla y MDN "
+                    "son 63072000 (dos años). includeSubDomains y preload son opcionales: "
+                    "el primero solo si todos los subdominios ya sirven HTTPS."
                 ),
                 references=refs,
             )
         ]
 
     if len(values) > 1:
+        # RFC 6797 §8.1 añade una regla propia: el navegador procesa únicamente
+        # el primer campo. Aun así el mensaje incumple RFC 9110 §5.3 y el
+        # comportamiento de intermediarios no es predecible.
         return [
-            finding(
-                "incorrectas",
-                "incorrecta",
-                "media",
+            repeated_field_finding(
                 "Strict-Transport-Security",
-                "Se recibieron múltiples campos HSTS y el resultado es ambiguo",
-                evidence=" | ".join(values),
-                risk=(
-                    "RFC 6797 indica que el navegador procesa únicamente el primer campo; "
-                    "intermediarios y herramientas pueden presentar el conjunto de forma diferente."
-                ),
-                recommendation="Emite una sola cabecera HSTS canónica.",
+                values,
                 references=[OWASP_WSTG_HEADERS, MDN_HSTS],
             )
         ]
@@ -392,25 +395,27 @@ def analyze_hsts(snapshot: ResponseSnapshot, excluded: set[str]) -> list[Finding
             )
         ]
 
-    # SafeWebHeaders usa como línea base la propuesta vigente del proyecto
-    # OWASP Secure Headers: dos años e includeSubDomains. RFC 6797 permite una
-    # política válida solo para el host, pero OWASP advierte que omitir la
-    # cobertura de subdominios deja una superficie relevante. El resultado se
-    # consolida para que HSTS nunca aparezca a la vez como correcta e
-    # informativa/incorrecta.
-    baseline_gaps: list[str] = []
-    if max_age < 63_072_000:
-        baseline_gaps.append(
-            f"max-age={max_age} es inferior a los 63072000 segundos propuestos por OWASP"
-        )
-    if "includesubdomains" not in directives:
-        baseline_gaps.append("falta includeSubDomains")
-    if "preload" in directives and (
-        max_age < 31_536_000 or "includesubdomains" not in directives
-    ):
-        baseline_gaps.append(
-            "preload no cumple sus precondiciones mínimas (un año e includeSubDomains)"
-        )
+    # Línea base alineada con Mozilla (wiki de seguridad web), MDN (guía
+    # práctica de TLS) y hstspreload.org:
+    #
+    #   * max-age es el único parámetro obligatorio. El mínimo exigible son
+    #     seis meses (15768000) y el valor recomendado son dos años (63072000).
+    #     Ninguna fuente fija un máximo.
+    #   * includeSubDomains y preload son OPCIONALES. No se exigen, porque
+    #     activar includeSubDomains sin HTTPS en todo el árbol de subdominios
+    #     deja sitios inaccesibles, y hstspreload.org pide expresamente que las
+    #     herramientas no recomienden preload por defecto.
+    #   * Si el sitio SÍ envía preload, entonces sus requisitos pasan a ser
+    #     exigibles: un año de max-age e includeSubDomains. Sin ellos la
+    #     solicitud de precarga sería rechazada y el operador cree tener una
+    #     protección que no tiene.
+    refs_full = [
+        MOZILLA_WEB_SECURITY,
+        MDN_TLS_GUIDE,
+        HSTS_PRELOAD_LIST,
+        OWASP_SECURE_HEADERS,
+        *refs,
+    ]
 
     policy_notes: list[str] = []
     if unknown:
@@ -423,27 +428,84 @@ def analyze_hsts(snapshot: ResponseSnapshot, excluded: set[str]) -> list[Finding
             "max-age es extremadamente grande; los clientes pueden limitar su duración efectiva"
         )
     ignored_note = "; " + "; ".join(policy_notes) if policy_notes else ""
-    if baseline_gaps:
+
+    if max_age < HSTS_MIN_MAX_AGE:
         return [
             finding(
                 "incorrectas",
                 "incorrecta",
                 "media",
                 "Strict-Transport-Security",
-                "HSTS es válida para el host, pero no cumple la línea base reforzada de OWASP",
-                evidence=f"{value}; brechas: {'; '.join(baseline_gaps)}{ignored_note}",
+                "La duración de HSTS no alcanza el mínimo exigido",
+                evidence=(
+                    f"{value}; max-age={max_age} s "
+                    f"({_describe_duration(max_age)}), por debajo de "
+                    f"{HSTS_MIN_MAX_AGE} s (seis meses){ignored_note}"
+                ),
                 risk=(
-                    "La protección puede caducar antes de la referencia adoptada o no cubrir "
-                    "subdominios, que conservan políticas HSTS independientes."
+                    "La política caduca antes de la referencia mínima de Mozilla y MDN. "
+                    "Un usuario que no visite el sitio durante ese periodo vuelve a quedar "
+                    "expuesto a degradación de protocolo en su primera conexión."
                 ),
                 recommendation=(
-                    "Después de verificar HTTPS en todo el árbol necesario, usa "
-                    "max-age=63072000; includeSubDomains. Añade preload únicamente tras una "
-                    "decisión operativa y una validación específica."
+                    f"Eleva max-age a {HSTS_MIN_MAX_AGE} como mínimo; la referencia "
+                    f"recomendada son {HSTS_RECOMMENDED_MAX_AGE} (dos años). Un valor "
+                    "menor solo es apropiado durante el despliegue escalonado que "
+                    "describe hstspreload.org, para detectar roturas antes de "
+                    "comprometerse con una duración larga."
                 ),
-                references=[OWASP_SECURE_HEADERS, *refs],
+                references=refs_full,
             )
         ]
+
+    # A partir de aquí la duración cumple. Solo se degrada el veredicto si el
+    # propio sitio pide preload y no cumple los requisitos de la lista.
+    preload_gaps: list[str] = []
+    if "preload" in directives:
+        if max_age < HSTS_PRELOAD_MIN_MAX_AGE:
+            preload_gaps.append(
+                f"la lista de precarga exige max-age >= {HSTS_PRELOAD_MIN_MAX_AGE} "
+                f"(un año) y la política declara {max_age}"
+            )
+        if "includesubdomains" not in directives:
+            preload_gaps.append("la lista de precarga exige includeSubDomains")
+    if preload_gaps:
+        return [
+            finding(
+                "incorrectas",
+                "incorrecta",
+                "media",
+                "Strict-Transport-Security",
+                "La política solicita preload sin cumplir los requisitos de la lista",
+                evidence=f"{value}; {'; '.join(preload_gaps)}{ignored_note}",
+                risk=(
+                    "La solicitud de precarga sería rechazada. El operador puede creer que "
+                    "el dominio está protegido en la primera conexión cuando no lo está."
+                ),
+                recommendation=(
+                    "Retira preload, o cumple sus tres requisitos: max-age de al menos "
+                    f"{HSTS_PRELOAD_MIN_MAX_AGE}, includeSubDomains, y HTTPS operativo en "
+                    "todos los subdominios. La propia hstspreload.org advierte que el "
+                    "beneficio de la precarga es mínimo frente al de HSTS y que la salida "
+                    "de la lista es lenta."
+                ),
+                references=refs_full,
+            )
+        ]
+
+    # Observaciones que NO degradan el veredicto: son opciones, no requisitos.
+    optional_notes: list[str] = []
+    if max_age < HSTS_RECOMMENDED_MAX_AGE:
+        optional_notes.append(
+            f"cumple el mínimo de seis meses; la referencia recomendada son "
+            f"{HSTS_RECOMMENDED_MAX_AGE} s (dos años)"
+        )
+    if "includesubdomains" not in directives:
+        optional_notes.append(
+            "includeSubDomains no está presente: es opcional y solo procede si todos "
+            "los subdominios, incluidos los internos, ya sirven HTTPS"
+        )
+    optional_text = "; " + "; ".join(optional_notes) if optional_notes else ""
 
     return [
         finding(
@@ -451,15 +513,33 @@ def analyze_hsts(snapshot: ResponseSnapshot, excluded: set[str]) -> list[Finding
             "correcta",
             "informativa",
             "Strict-Transport-Security",
-            "HSTS cumple la línea base reforzada de OWASP",
-            evidence=f"{value}{ignored_note}",
-            recommendation=(
-                "Mantén HTTPS operativo en el dominio y todos los subdominios cubiertos. "
-                "No añadas preload sin revisar antes sus consecuencias."
+            "HSTS cumple la duración mínima exigida",
+            evidence=(
+                f"{value}; max-age={max_age} s "
+                f"({_describe_duration(max_age)}){optional_text}{ignored_note}"
             ),
-            references=[OWASP_SECURE_HEADERS, *refs],
+            recommendation=(
+                "Mantén HTTPS operativo durante toda la vigencia declarada: la política "
+                "no puede revocarse antes de que expire en los navegadores que ya la "
+                "almacenaron. includeSubDomains y preload son opcionales; evalúalos "
+                "según el árbol de subdominios y el riesgo del sitio."
+            ),
+            references=refs_full,
         )
     ]
+
+
+def _describe_duration(seconds: int) -> str:
+    """Traduce ``max-age`` a una magnitud legible en el informe."""
+
+    if seconds >= 31_536_000:
+        years = seconds / 31_536_000
+        return f"~{years:.1f} años".replace(".0 ", " ")
+    if seconds >= 2_592_000:
+        return f"~{seconds / 2_592_000:.1f} meses".replace(".0 ", " ")
+    if seconds >= 86_400:
+        return f"~{seconds / 86_400:.1f} días".replace(".0 ", " ")
+    return f"{seconds} s"
 
 
 def analyze_x_content_type_options(
@@ -485,14 +565,22 @@ def analyze_x_content_type_options(
                 references=refs,
             )
         ]
+    if len(values) > 1:
+        return [
+            repeated_field_finding(
+                "X-Content-Type-Options",
+                values,
+                references=[OWASP_WSTG_HEADERS, *refs],
+            )
+        ]
     return [
         finding(
             "incorrectas",
             "incorrecta",
             "media",
             "X-Content-Type-Options",
-            "La cabecera tiene un valor no reconocido o está duplicada",
-            evidence=" | ".join(values),
+            "La cabecera tiene un valor no reconocido",
+            evidence=values[0] or "Valor vacío.",
             risk="Los navegadores pueden ignorar una configuración diferente de nosniff.",
             recommendation="Emite una sola cabecera con el valor exacto nosniff.",
             references=[OWASP_WSTG_HEADERS, *refs],
